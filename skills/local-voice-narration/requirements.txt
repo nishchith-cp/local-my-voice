@@ -1,0 +1,4 @@
+# Pinned direct dependencies, not a complete transitive lock.
+mlx-audio==0.6.7
+soundfile==0.13.1
+numpy==2.2.6

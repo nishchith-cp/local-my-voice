@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local voice narration</title>
+<style>
+body {font: 17px system-ui; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.5; color: #172331; background: #f5f7fb; overflow-wrap: anywhere}
+section {background: white; padding: 24px; border-radius: 16px; margin: 18px 0}
+input {max-width: 100%}
+textarea {width: 100%; box-sizing: border-box; font: inherit; min-height: 160px}
+label {display: block; margin: 16px 0} button {font: inherit; padding: 12px; cursor: pointer}
+audio {display: block; width: 100%; margin: 12px 0} #error {color: #a11919; white-space: pre-wrap}
+a {color: #1554a0} small {display: block} #stage {font-weight: 600}
+</style>
+<h1>Local voice narration</h1>
+<p>Try a short sample in your authorized voice, listen, and export. Then replace
+the sample with your own transcript and generate another take.</p>
+<section>
+<h2>1. Know what happens</h2>
+<p>Setup installs Python dependencies into an isolated environment. The first
+online generation downloads Qwen3-TTS model files from Hugging Face
+(<code>mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit</code>). Disk space and
+Apple Silicon unified memory are needed; download size and time vary.</p>
+<p>Model files normally live in <code>~/.cache/huggingface/hub</code> (unless
+your environment overrides it) and are reused. Cached-only mode is the default.
+Missing model files produce an error, not an automatic online retry.</p>
+<p>Selecting a recording sends it only to this loopback service on your computer,
+not a cloud voice provider. The service converts it to mono 24 kHz, loads the
+model, generates speech locally, optionally filters noise, then encodes MP3.
+Model downloads can make external requests; optional telemetry is disabled
+where supported. This is not a guarantee of zero dependency networking.</p>
+<p>Session audio is temporary. Download the files you want to keep before
+stopping the server. Nothing is added to the skill repository.</p>
+<p id="prerequisites">Checking ffmpeg...</p>
+</section>
+<section>
+<h2>2. Choose a voice and try the sample</h2>
+<label>Voice recording (maximum 16 MiB)
+<input id="voice" type="file" accept="audio/*" required></label>
+<label><input id="consent" type="checkbox"> This is my voice, or I have the
+speaker's explicit permission to synthesize it.</label>
+<label>Narration text (editable sample; maximum 20,000 characters)
+<textarea id="text" maxlength="20000">Welcome to a quiet morning. The sky is clear, and a gentle breeze moves through the trees. Take a moment to pause, breathe, and enjoy the day ahead.</textarea></label>
+<label><input id="download" type="checkbox"> Allow missing model files to
+download from Hugging Face for this run. I understand this can be substantial
+and requires internet; it does not upload my recording.</label>
+<label><input id="clean" type="checkbox" checked> Also make a gently cleaned WAV
+(preserve the raw WAV).</label>
+<button id="generate" type="button">Generate narration</button>
+<p id="stage" role="status" aria-live="polite">Ready</p>
+<p id="error" role="alert"></p>
+</section>
+<section>
+<h2>3. Listen and export</h2>
+<p>Listen to the complete result before sharing. Check missing words,
+pronunciation, similarity, and robotic artifacts. Filtering may change the
+voice and cannot fix model mistakes. Disclose synthetic narration when sharing.</p>
+<div id="outputs"></div>
+<p>For a custom transcript, replace the text above and generate again.
+Download the current take first; each run has new files.</p>
+</section>
+<script nonce="__TOKEN__">
+const token = "__TOKEN__";
+const element = id => document.getElementById(id);
+let submitting = false;
+let rendered = "";
+async function poll() {
+  try {
+    const response = await fetch("/status", {headers: {"X-Session-Token": token}});
+    if (!response.ok) throw new Error("Cannot read local service status");
+    const state = await response.json();
+    const checks = state.prerequisites;
+    const issues = [];
+    if (!checks.ffmpeg) issues.push("ffmpeg missing");
+    if (!checks.native_mac) issues.push("native Apple Silicon macOS required");
+    if (!checks.supported_python) issues.push("Python 3.11 or later required");
+    if (checks.missing.length) issues.push("missing packages: " + checks.missing.join(", "));
+    element("prerequisites").textContent = "Python " + checks.python + ". " +
+      (issues.length ? "Setup needed: " + issues.join("; ") +
+        ". Follow README setup, then restart this service using the venv Python."
+        : "Prerequisites found. Model cache availability is checked when loading.");
+    element("stage").textContent = state.stage;
+    element("error").textContent = state.error || "";
+    element("generate").disabled = submitting || state.busy || issues.length > 0;
+    const signature = JSON.stringify(state.files);
+    if (signature !== rendered) {
+      rendered = signature;
+      element("outputs").replaceChildren();
+      for (const name of state.files) {
+        const url = "/media/" + token + "/" + name;
+        const audio = document.createElement("audio");
+        audio.controls = true; audio.preload = "none"; audio.src = url;
+        const link = document.createElement("a");
+        link.href = url; link.download = name.split("/").pop();
+        link.textContent = "Download " + link.download;
+        element("outputs").append(link, audio);
+      }
+    }
+  } catch (error) {
+    element("error").textContent = "Local service unavailable: " + error.message;
+    element("generate").disabled = true;
+  } finally { setTimeout(poll, 1200); }
+}
+element("generate").addEventListener("click", async () => {
+  submitting = true; element("generate").disabled = true;
+  try {
+    const file = element("voice").files[0];
+    if (!file || file.size === 0 || file.size > 16 * 1024 * 1024)
+      throw new Error("Choose a non-empty recording up to 16 MiB.");
+    if (!element("consent").checked) throw new Error("Confirm speaker permission first.");
+    if (!element("text").value.trim()) throw new Error("Enter narration text.");
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 8192)
+      binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+    const response = await fetch("/generate", {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "X-Session-Token": token},
+      body: JSON.stringify({audio: btoa(binary), text: element("text").value,
+        consent: element("consent").checked, download: element("download").checked,
+        clean: element("clean").checked})
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Generation request failed");
+  } catch (error) { window.alert(error.message); }
+  finally { submitting = false; }
+});
+poll();
+</script>
+</html>
