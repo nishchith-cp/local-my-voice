@@ -8,6 +8,43 @@ Generation uses MLX Audio and Qwen3-TTS locally. Setup downloads dependencies;
 first use may download model files after confirmation. No cloud voice API is
 required. Optional gentle filtering preserves the raw audio.
 
+## Listen to the sample text
+
+> Welcome to a quiet morning. The sky is clear, and a gentle breeze moves through
+> the trees. Take a moment to pause, breathe, and enjoy the day ahead.
+
+[Listen/download the raw demo (MP3)](samples/demo-raw.mp3) ·
+[Listen/download the gently filtered demo (MP3)](samples/demo-clean.mp3)
+
+GitHub may show a download rather than an inline audio player. Open the file's
+raw/download link to play it in your browser or audio app.
+
+These public examples use **eSpeak NG's generic English synthetic voice**,
+not a person's recording, saved voice, or Qwen3-TTS output. They demonstrate
+the sample text and MP3/filtering exports, **not voice-cloning quality**.
+No private reference was used. The same text is prefilled in the local interface;
+your authorized voice sample is used only when you run narration locally.
+
+To reproduce the demos with eSpeak NG and ffmpeg installed:
+
+```sh
+DEMO_DIR="$(mktemp -d)"
+espeak-ng -v en-us -s 145 -f samples/demo-text.txt -w "$DEMO_DIR/demo.wav"
+ffmpeg -nostdin -n -i "$DEMO_DIR/demo.wav" \
+  -c:a libmp3lame -q:a 2 "$DEMO_DIR/demo-raw.mp3"
+ffmpeg -nostdin -n -i "$DEMO_DIR/demo.wav" \
+  -af 'highpass=f=70,afftdn=nr=8:nf=-45:tn=1:gs=8,alimiter=limit=0.95:level=false' \
+  -c:a libmp3lame -q:a 2 "$DEMO_DIR/demo-clean.mp3"
+printf 'Demo files: %s\n' "$DEMO_DIR"
+```
+
+The commands create a fresh temporary directory; remove it after saving the
+outputs you want. eSpeak NG is needed
+only to reproduce these generic demos, not to run the skill. The demo was
+generated with eSpeak NG 1.52.0; its software has
+[separate licensing](https://github.com/espeak-ng/espeak-ng/blob/master/COPYING).
+No eSpeak software or voice data is bundled here.
+
 ## Quick start: try it in your browser
 
 You need **native Apple Silicon macOS, Python 3.11 and ffmpeg** installed.
@@ -100,7 +137,9 @@ share the same pipeline.
 Use only your own voice or get the speaker's explicit permission. Do not
 impersonate people deceptively; disclose synthetic narration when sharing.
 Keep recordings, private scripts, embeddings, generated media and model caches
-outside version control. The repository bundles only tooling and generic tests.
+outside version control. Only the explicitly reviewed generic synthetic demos
+above are included alongside the tooling and tests; personal references remain
+excluded from version control.
 
 Audio selection transfers data to the local loopback service, not a cloud
 voice provider. Inference is local, but package/model downloads make external

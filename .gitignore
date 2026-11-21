@@ -24,3 +24,7 @@ models/
 *.bin
 *.pt
 *.pth
+
+# Only reviewed, generic public demos may be committed; never personal references.
+!samples/demo-raw.mp3
+!samples/demo-clean.mp3
