@@ -46,7 +46,7 @@ class App:
         self.process = None
         self.stopping = False
         self.status = {"stage": "Ready. Choose a voice reference and review consent.", "busy": False,
-                       "files": [], "error": None}
+                       "files": [], "error": None, "reference_source": None}
 
     def update(self, stage):
         with self.lock:
@@ -85,7 +85,7 @@ class App:
                 raise ValueError("Use Replace saved voice to change the active reference")
             self.status = {"stage": "Saving your reference locally" if audio is not None else
                            "Using your saved voice", "busy": True,
-                           "files": [], "error": None}
+                           "files": [], "error": None, "reference_source": None}
             self.worker = threading.Thread(
                 target=self.run, args=(audio, text, data.get("download") is True,
                                       data.get("clean") is True),
@@ -174,6 +174,8 @@ class App:
                     prepared = self.voices.active()
                 if prepared is None:
                     raise ValueError("Saved voice is missing; upload an authorized recording")
+            with self.lock:
+                self.status["reference_source"] = "uploaded" if audio is not None else "saved"
             raw = folder / "raw.wav"
             self.synthesize(prepared, text, raw, download)
             files = [raw]
@@ -193,7 +195,11 @@ class App:
             files.append(mp3)
             with self.lock:
                 self.status["files"] = [str(file.relative_to(self.directory)) for file in files]
-                self.status["stage"] = "Ready to preview/export. Listen through for missing words and artifacts."
+                source = self.status["reference_source"]
+                self.status["stage"] = (
+                    f"AI-generated narration using your {source} voice sample. "
+                    "Ready to preview/export; listen for missing words and artifacts."
+                )
         except Exception as error:
             # Worker exceptions must become explicit UI failures, never success-shaped results.
             detail = error.stderr if isinstance(error, subprocess.CalledProcessError) else str(error)

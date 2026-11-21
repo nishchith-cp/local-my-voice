@@ -62,6 +62,7 @@ and requires internet; it does not upload my recording.</label>
 </section>
 <section>
 <h2>3. Listen and export</h2>
+<p id="result-voice" role="status" aria-live="polite"></p>
 <p>Listen to the complete result before sharing. Check missing words,
 pronunciation, similarity, and robotic artifacts. Filtering may change the
 voice and cannot fix model mistakes. Disclose synthetic narration when sharing.</p>
@@ -85,8 +86,9 @@ async function poll() {
     busy = state.busy;
     savedVoice = state.voice.saved;
     element("saved-voice").textContent = state.voice.error ||
-      (savedVoice ? "Active saved voice: " + state.voice.path +
-        ". Reused automatically; no upload or permission confirmation needed."
+      (savedVoice ? "Using your saved voice sample: " + state.voice.path +
+        ". AI recreates speech from this reference; it does not verify speaker identity. " +
+        "Reused automatically; no upload or permission confirmation needed."
         : "No saved voice. Choose and authorize a recording once.");
     element("upload").hidden = savedVoice && !replacing;
     element("replace").hidden = !savedVoice && !state.voice.error;
@@ -103,7 +105,14 @@ async function poll() {
       (issues.length ? "Setup needed: " + issues.join("; ") +
         ". Follow README setup, then restart this service using the venv Python."
         : "Prerequisites found. Model cache availability is checked when loading.");
-    element("stage").textContent = state.stage;
+    const referenceSource = ["saved", "uploaded"].includes(state.reference_source)
+      ? state.reference_source : null;
+    element("stage").textContent = (state.busy && referenceSource
+      ? "Using your " + referenceSource + " voice sample. " : "") + state.stage;
+    element("result-voice").textContent = state.files.length && referenceSource
+      ? "AI-generated narration using your " + referenceSource +
+        " voice sample. This is an AI recreation, not an original recording."
+      : "";
     element("error").textContent = state.error || "";
     element("generate").disabled = submitting || state.busy || issues.length > 0;
     const signature = JSON.stringify(state.files);

@@ -61,6 +61,12 @@ Saving the reference records your permission for its continued local reuse;
 it is not independent proof of speaker consent. Do not reuse it if that permission
 has been withdrawn.
 
+The page indicates **Using your saved voice sample** beside the replace/delete
+controls. During generation and playback it distinguishes a saved reference from
+a newly uploaded one, and labels results as **AI-generated narration using your
+saved/uploaded voice sample**. This identifies the reference used, not verified
+speaker identity; the result is an AI recreation, not an original recording.
+
 Use **Replace saved voice** to select and authorize a new recording. A failed
 conversion/save preserves the previous voice; a successfully saved replacement
 remains active even if subsequent model generation fails. Use **Delete saved voice**

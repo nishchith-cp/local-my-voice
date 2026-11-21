@@ -47,6 +47,8 @@ Download desired outputs before stopping the service; generated session files ar
 temporary, but the saved voice survives restarts. The UI shows the active reference
 and explicit replace/delete controls. New recordings need fresh permission;
 the same saved voice does not. Do not run multiple service instances concurrently.
+Point out the saved/uploaded voice indicator and AI-generated result label:
+they identify the reference used, not verified identity or an original recording.
 Never describe a mocked test as actual synthesis or a listening-quality review.
 
 ## CLI workflow

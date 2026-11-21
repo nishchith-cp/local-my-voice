@@ -233,6 +233,8 @@ class InterfaceTests(unittest.TestCase):
         self.assertEqual(status, 200)
         for text in (b"<textarea", b"Hugging Face", b"loopback", b"Download", b"permission"):
             self.assertIn(text, content)
+        self.assertIn(b"AI-generated narration using your ", content)
+        self.assertIn(b"not an original recording", content)
         self.assertNotIn(b"__TOKEN__", content)
         self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
 
@@ -292,6 +294,12 @@ class InterfaceTests(unittest.TestCase):
                     self.assertFalse(state["busy"])
                     self.assertIsNone(state["error"])
                     self.assertEqual(len(state["files"]), 3)
+                    expected_source = "saved" if download else "uploaded"
+                    self.assertEqual(state["reference_source"], expected_source)
+                    self.assertIn(
+                        f"AI-generated narration using your {expected_source} voice sample",
+                        state["stage"],
+                    )
                     for name in state["files"]:
                         status, payload, _ = self.request("GET", f"/media/{self.app.token}/{name}")
                         self.assertEqual(status, 200)
@@ -317,6 +325,7 @@ class InterfaceTests(unittest.TestCase):
                 self.assertEqual(transform.call_args.args[2], "export")
                 self.assertEqual(transform.call_count, 1)
         self.assertIsNone(restarted.status["error"])
+        self.assertEqual(restarted.status["reference_source"], "saved")
         headers = {"X-Session-Token": self.app.token, "Content-Type": "application/json"}
         status, _, _ = self.request("POST", "/voice/delete", "{}", headers)
         self.assertEqual(status, 200)
@@ -411,6 +420,19 @@ class InterfaceTests(unittest.TestCase):
         self.assertFalse(self.app.status["busy"])
         self.assertIn("ffmpeg unavailable", self.app.status["error"])
         self.assertEqual(self.app.status["files"], [])
+        self.assertIsNone(self.app.status["reference_source"])
+
+    def test_missing_reference_never_claims_voice_is_used(self):
+        headers = {"X-Session-Token": self.app.token}
+        status, payload, _ = self.request("GET", "/status", headers=headers)
+        state = json.loads(payload)
+        self.assertEqual(status, 200)
+        self.assertFalse(state["voice"]["saved"])
+        self.assertIsNone(state["reference_source"])
+        self.assertEqual(state["files"], [])
+        with self.assertRaisesRegex(ValueError, "No saved voice"):
+            self.app.start({"text": "Generic text."})
+        self.assertIsNone(self.app.status["reference_source"])
 
 
 if __name__ == "__main__":

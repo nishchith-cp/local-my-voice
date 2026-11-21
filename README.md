@@ -60,6 +60,11 @@ outside this repository, until replaced or deleted. Use only on your trusted
 local account; deleting a file is not a guarantee of secure erasure or removal
 from backups. Generated outputs remain temporary and are not saved with the voice.
 
+The interface explicitly indicates when your saved or newly uploaded voice sample
+is used. Results are labeled **AI-generated narration using your voice sample**:
+this is an AI recreation from the authorized reference, not an original recording
+or verification of the speaker's identity.
+
 Model files normally remain in `~/.cache/huggingface/hub` and are reused on
 later runs; environment settings can change this location. Initial dependency
 and model downloads need internet and free disk space. Download sizes and
