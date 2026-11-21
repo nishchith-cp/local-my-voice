@@ -29,16 +29,26 @@ not a cloud voice provider. The service converts it to mono 24 kHz, loads the
 model, generates speech locally, optionally filters noise, then encodes MP3.
 Model downloads can make external requests; optional telemetry is disabled
 where supported. This is not a guarantee of zero dependency networking.</p>
-<p>Session audio is temporary. Download the files you want to keep before
-stopping the server. Nothing is added to the skill repository.</p>
+<p>Your authorized reference is saved privately on this computer in
+<code>~/Library/Application Support/local-voice-narration/authorized-reference.wav</code>.
+It is reused for later transcripts and after restarting this service, until you
+replace or delete it. Permission is confirmed once per saved voice. Generated
+session audio remains temporary: download outputs before stopping the server.
+Nothing is added to the skill repository.</p>
 <p id="prerequisites">Checking ffmpeg...</p>
 </section>
 <section>
 <h2>2. Choose a voice and try the sample</h2>
-<label>Voice recording (maximum 16 MiB)
-<input id="voice" type="file" accept="audio/*" required></label>
+<p id="saved-voice" role="status"></p>
+<button id="replace" type="button" hidden>Replace saved voice</button>
+<button id="delete" type="button" hidden>Delete saved voice</button>
+<div id="upload">
+<label>Voice recording (maximum 16 MiB; saved locally for reuse)
+<input id="voice" type="file" accept="audio/*"></label>
 <label><input id="consent" type="checkbox"> This is my voice, or I have the
-speaker's explicit permission to synthesize it.</label>
+speaker's explicit permission to synthesize it. Save this reference locally
+and reuse it for later narration.</label>
+</div>
 <label>Narration text (editable sample; maximum 20,000 characters)
 <textarea id="text" maxlength="20000">Welcome to a quiet morning. The sky is clear, and a gentle breeze moves through the trees. Take a moment to pause, breathe, and enjoy the day ahead.</textarea></label>
 <label><input id="download" type="checkbox"> Allow missing model files to
@@ -64,11 +74,25 @@ const token = "__TOKEN__";
 const element = id => document.getElementById(id);
 let submitting = false;
 let rendered = "";
+let savedVoice = false;
+let replacing = false;
+let busy = false;
 async function poll() {
   try {
     const response = await fetch("/status", {headers: {"X-Session-Token": token}});
     if (!response.ok) throw new Error("Cannot read local service status");
     const state = await response.json();
+    busy = state.busy;
+    savedVoice = state.voice.saved;
+    element("saved-voice").textContent = state.voice.error ||
+      (savedVoice ? "Active saved voice: " + state.voice.path +
+        ". Reused automatically; no upload or permission confirmation needed."
+        : "No saved voice. Choose and authorize a recording once.");
+    element("upload").hidden = savedVoice && !replacing;
+    element("replace").hidden = !savedVoice && !state.voice.error;
+    element("delete").hidden = !savedVoice && !state.voice.error;
+    element("replace").disabled = state.busy || submitting;
+    element("delete").disabled = state.busy || submitting;
     const checks = state.prerequisites;
     const issues = [];
     if (!checks.ffmpeg) issues.push("ffmpeg missing");
@@ -105,23 +129,50 @@ element("generate").addEventListener("click", async () => {
   submitting = true; element("generate").disabled = true;
   try {
     const file = element("voice").files[0];
-    if (!file || file.size === 0 || file.size > 16 * 1024 * 1024)
+    const uploading = !savedVoice || replacing;
+    if (uploading && (!file || file.size === 0 || file.size > 16 * 1024 * 1024))
       throw new Error("Choose a non-empty recording up to 16 MiB.");
-    if (!element("consent").checked) throw new Error("Confirm speaker permission first.");
+    if (uploading && !element("consent").checked)
+      throw new Error("Confirm speaker permission and local saving first.");
     if (!element("text").value.trim()) throw new Error("Enter narration text.");
-    const bytes = new Uint8Array(await file.arrayBuffer());
     let binary = "";
-    for (let i = 0; i < bytes.length; i += 8192)
-      binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+    if (uploading) {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      for (let i = 0; i < bytes.length; i += 8192)
+        binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+    }
     const response = await fetch("/generate", {
       method: "POST",
       headers: {"Content-Type": "application/json", "X-Session-Token": token},
-      body: JSON.stringify({audio: btoa(binary), text: element("text").value,
+      body: JSON.stringify({audio: uploading ? btoa(binary) : null,
+        replace: replacing, text: element("text").value,
         consent: element("consent").checked, download: element("download").checked,
         clean: element("clean").checked})
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Generation request failed");
+    replacing = false;
+    element("voice").value = "";
+    element("consent").checked = false;
+  } catch (error) { window.alert(error.message); }
+  finally { submitting = false; }
+});
+element("replace").addEventListener("click", () => {
+  replacing = true;
+  element("voice").value = "";
+  element("consent").checked = false;
+  element("upload").hidden = false;
+});
+element("delete").addEventListener("click", async () => {
+  if (busy || submitting || !window.confirm("Delete the saved reference from this computer?")) return;
+  submitting = true;
+  try {
+    const response = await fetch("/voice/delete", {method: "POST",
+      headers: {"Content-Type": "application/json", "X-Session-Token": token}, body: "{}"});
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Deletion failed");
+    savedVoice = false; replacing = false;
+    element("voice").value = ""; element("consent").checked = false;
   } catch (error) { window.alert(error.message); }
   finally { submitting = false; }
 });

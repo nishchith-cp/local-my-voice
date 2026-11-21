@@ -159,14 +159,17 @@ def parser():
         command = commands.add_parser(name)
         command.add_argument("--output", required=True)
         if name == "generate":
-            command.add_argument("--reference", required=True)
+            reference = command.add_mutually_exclusive_group(required=True)
+            reference.add_argument("--reference")
+            reference.add_argument("--saved-voice", action="store_true",
+                                   help="Reuse the voice authorized and saved in the local UI")
             command.add_argument("--script", required=True, help="UTF-8 narration text file")
             command.add_argument("--allow-download", action="store_true")
         else:
             command.add_argument("--input", required=True)
         if name in ("prepare", "generate"):
             command.add_argument(
-                "--consent", action="store_true", required=True,
+                "--consent", action="store_true", required=name == "prepare",
                 help="Confirm your own voice or the speaker's explicit permission",
             )
     return root
@@ -176,7 +179,16 @@ def main(argv=None):
     args = parser().parse_args(argv)
     try:
         if args.command == "generate":
-            generate(args.reference, source_file(args.script).read_text(encoding="utf-8"),
+            if args.saved_voice:
+                from voice_store import VoiceStore
+                reference = VoiceStore().active()
+                if reference is None:
+                    raise ValueError("No saved voice; authorize and save one in the local UI first")
+            else:
+                if not args.consent:
+                    raise ValueError("--consent is required with an explicit --reference")
+                reference = args.reference
+            generate(reference, source_file(args.script).read_text(encoding="utf-8"),
                      args.output, offline=not args.allow_download,
                      progress=lambda stage: print(stage, flush=True))
         else:

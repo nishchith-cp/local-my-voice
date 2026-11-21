@@ -27,7 +27,15 @@ Run `.venv/bin/python scripts/serve.py` from this directory, then open the print
 `http://127.0.0.1:8765` address. Do not bind to a public interface, forward the
 port, or enable public sharing.
 
-Guide the user through selecting an authorized recording, confirming consent,
+Check the page's saved voice status first. Reuse the active reference without
+asking for an upload or speaker permission again. Only request a recording when
+none is saved or the user explicitly chooses replacement. Never use a reference
+if the user withdraws permission; direct them to Delete saved voice.
+
+For a first upload/replacement, explain that the prepared reference is retained at
+`~/Library/Application Support/local-voice-narration/authorized-reference.wav`
+outside the repository until replaced/deleted, and confirm permission for this
+local reuse. Guide the user through selecting an authorized recording, confirming consent,
 trying the editable generic sample, explicitly allowing model downloads if
 needed, and generating. Selecting audio transfers it to the local loopback
 service, not a cloud voice provider. The service shows factual stages and errors,
@@ -35,7 +43,10 @@ not invented percentages or estimated times.
 
 Have the user listen and download raw WAV, optional cleaned WAV and MP3.
 Then they can replace the sample with their own transcript and generate again.
-Download desired outputs before stopping the service; session files are temporary.
+Download desired outputs before stopping the service; generated session files are
+temporary, but the saved voice survives restarts. The UI shows the active reference
+and explicit replace/delete controls. New recordings need fresh permission;
+the same saved voice does not. Do not run multiple service instances concurrently.
 Never describe a mocked test as actual synthesis or a listening-quality review.
 
 ## CLI workflow
@@ -51,6 +62,11 @@ Generation is cached-only by default. Add `--allow-download` only after
 authorization. Use individually quoted paths and UTF-8 transcript files, not
 shell-interpolated text. Keep personal files outside the repository. Existing
 output paths are always refused; choose new filenames instead of deleting originals.
+
+Once a voice has been authorized and saved in the UI, use
+`generate --saved-voice --script <script.txt> --output <new.wav>` for later CLI
+requests. Do not ask for another recording or redundant consent confirmation.
+Explicit `--reference` usage still requires `--consent` and does not save a voice.
 
 ## Model contract and limitations
 

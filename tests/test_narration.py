@@ -21,6 +21,14 @@ import narrate
 import serve
 
 
+def reference_bytes(sample=1000):
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as file:
+        file.setparams((1, 2, 24000, 0, "NONE", "not compressed"))
+        file.writeframes(struct.pack("<h", sample) * 240)
+    return buffer.getvalue()
+
+
 class PipelineTests(unittest.TestCase):
     def test_chunks_preserve_words_and_paragraphs(self):
         text = "A quiet morning.\n\nClouds pass over the open sky."
@@ -198,7 +206,7 @@ class PipelineTests(unittest.TestCase):
 class InterfaceTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
-        self.app = serve.App(self.temporary.name)
+        self.app = serve.App(self.temporary.name, Path(self.temporary.name) / "saved")
         self.server = serve.ThreadingHTTPServer(("127.0.0.1", 0), serve.handler_for(self.app))
         self.thread = threading.Thread(target=self.server.serve_forever)
         self.thread.start()
@@ -249,7 +257,8 @@ class InterfaceTests(unittest.TestCase):
 
     def test_sample_then_custom_transcript_export_with_mocked_model(self):
         def transform(source, destination, operation):
-            Path(destination).write_bytes(b"synthetic processed audio")
+            Path(destination).write_bytes(reference_bytes() if operation == "prepare"
+                                          else b"synthetic processed audio")
 
         calls = []
 
@@ -272,10 +281,10 @@ class InterfaceTests(unittest.TestCase):
                             done.set()
 
                     with patch.object(self.app, "run", side_effect=run):
-                        status, _, _ = self.request("POST", "/generate", json.dumps({
-                            "consent": True, "text": text, "download": download, "clean": True,
-                            "audio": base64.b64encode(b"synthetic fixture").decode(),
-                        }), headers)
+                        data = {"text": text, "download": download, "clean": True}
+                        if not download:
+                            data.update(consent=True, audio=base64.b64encode(b"fixture").decode())
+                        status, _, _ = self.request("POST", "/generate", json.dumps(data), headers)
                         self.assertEqual(status, 202)
                         self.assertTrue(done.wait(5))
                     status, payload, _ = self.request("GET", "/status", headers=headers)
@@ -288,6 +297,98 @@ class InterfaceTests(unittest.TestCase):
                         self.assertEqual(status, 200)
                         self.assertTrue(payload.startswith(b"synthetic"))
         self.assertEqual(calls, [("Generic sample text.", False), ("A custom transcript.", True)])
+        self.assertTrue(self.app.voices.active())
+
+    def test_saved_voice_survives_restart_and_delete_requires_new_upload(self):
+        prepared = Path(self.temporary.name) / "prepared.wav"
+        prepared.write_bytes(reference_bytes())
+        self.app.voices.save(prepared)
+        restarted = serve.App(self.temporary.name, self.app.voices.directory)
+        self.assertTrue(restarted.voice_status()["saved"])
+        with patch.object(restarted, "synthesize") as synthesis:
+            synthesis.side_effect = lambda ref, text, output, download: Path(output).write_bytes(
+                b"synthetic narration")
+            with patch.object(narrate, "transform") as transform:
+                transform.side_effect = lambda source, output, operation: Path(output).write_bytes(
+                    b"synthetic MP3")
+                restarted.start({"text": "Later narration."})
+                restarted.worker.join()
+                self.assertEqual(synthesis.call_args.args[0], restarted.voices.reference)
+                self.assertEqual(transform.call_args.args[2], "export")
+                self.assertEqual(transform.call_count, 1)
+        self.assertIsNone(restarted.status["error"])
+        headers = {"X-Session-Token": self.app.token, "Content-Type": "application/json"}
+        status, _, _ = self.request("POST", "/voice/delete", "{}", headers)
+        self.assertEqual(status, 200)
+        self.assertFalse(restarted.voice_status()["saved"])
+        with self.assertRaisesRegex(ValueError, "No saved voice"):
+            restarted.start({"text": "Later narration."})
+
+    def test_replacement_requires_explicit_choice_and_fresh_permission(self):
+        prepared = Path(self.temporary.name) / "prepared.wav"
+        prepared.write_bytes(reference_bytes())
+        self.app.voices.save(prepared)
+        data = {"text": "Generic text.", "audio": base64.b64encode(b"fixture").decode()}
+        for changes in ({"replace": True}, {"consent": True}):
+            with self.assertRaises(ValueError):
+                self.app.start(dict(data, **changes))
+        with patch.object(narrate, "transform") as transform:
+            transform.side_effect = lambda source, output, operation: Path(output).write_bytes(
+                reference_bytes(2000) if operation == "prepare" else b"synthetic output")
+            with patch.object(self.app, "synthesize") as synthesis:
+                synthesis.side_effect = lambda ref, text, output, download: Path(output).write_bytes(
+                    b"synthetic narration")
+                self.app.start(dict(data, consent=True, replace=True))
+                self.app.worker.join()
+        self.assertIsNone(self.app.status["error"])
+        self.assertEqual(self.app.voices.active().read_bytes(), reference_bytes(2000))
+        self.assertEqual(self.app.voices.reference.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(self.app.voices.directory.stat().st_mode & 0o777, 0o700)
+
+    def test_invalid_replacement_preserves_previous_voice(self):
+        prepared = Path(self.temporary.name) / "prepared.wav"
+        prepared.write_bytes(reference_bytes())
+        self.app.voices.save(prepared)
+        with patch.object(narrate, "transform") as transform:
+            transform.side_effect = lambda source, output, operation: Path(output).write_bytes(b"bad")
+            self.app.run(b"fixture", "Generic text.", False, False)
+        self.assertIsNotNone(self.app.status["error"])
+        self.assertEqual(self.app.voices.active().read_bytes(), reference_bytes())
+
+    def test_delete_and_replace_blocked_during_generation(self):
+        self.app.status["busy"] = True
+        with self.assertRaisesRegex(ValueError, "current job"):
+            self.app.delete_voice()
+        with self.assertRaisesRegex(ValueError, "already running"):
+            self.app.start({"text": "Generic text."})
+
+    def test_saved_reference_is_not_downloadable(self):
+        prepared = Path(self.temporary.name) / "prepared.wav"
+        prepared.write_bytes(reference_bytes())
+        self.app.voices.save(prepared)
+        status, _, _ = self.request("GET", f"/media/{self.app.token}/saved/authorized-reference.wav")
+        self.assertEqual(status, 404)
+
+    def test_cli_reuses_saved_voice_without_consent_prompt(self):
+        script = Path(self.temporary.name) / "script.txt"
+        script.write_text("Generic text.", encoding="utf-8")
+        prepared = Path(self.temporary.name) / "prepared.wav"
+        prepared.write_bytes(reference_bytes())
+        self.app.voices.save(prepared)
+        with patch("voice_store.VoiceStore", return_value=self.app.voices):
+            with patch.object(narrate, "generate") as generate:
+                self.assertEqual(narrate.main([
+                    "generate", "--saved-voice", "--script", str(script),
+                    "--output", str(script.parent / "out.wav"),
+                ]), 0)
+                self.assertEqual(generate.call_args.args[0], self.app.voices.reference)
+        with patch.object(narrate, "generate") as generate:
+            with patch("sys.stderr", new_callable=io.StringIO):
+                self.assertEqual(narrate.main([
+                    "generate", "--reference", str(prepared), "--script", str(script),
+                    "--output", str(script.parent / "out.wav"),
+                ]), 1)
+            generate.assert_not_called()
 
     def test_subprocess_isolates_each_runs_download_permission(self):
         reference = Path(self.temporary.name) / "reference.wav"

@@ -32,7 +32,8 @@ the interface directly.
 
 1. **Choose your recording.** Select a clear, short, single-speaker audio file
    up to 16 MiB and confirm that it is your voice or explicitly authorized.
-   The recording transfers only to the local service on your computer.
+   Approve local saving once. The recording transfers only to the local service
+   on your computer; its prepared reference is saved privately for reuse.
 2. **Try the sample.** The text box already contains a generic sample you can
    edit. You do not need a transcript of the reference recording.
 3. **Approve the first model download.** If the model is not cached, select
@@ -46,7 +47,18 @@ the interface directly.
 5. **Download your audio.** Preview the result and save the raw WAV, optional
    cleaned WAV, and MP3. Listen for missing words and pronunciation problems.
 6. **Use your own transcript.** Replace the sample text with what you want read
-   aloud and generate another take. Save current outputs before starting again.
+   aloud and generate another take. Your saved voice is reused automatically,
+   including after browser/service restarts; no repeated upload or speaker
+   permission prompt is needed for that same reference. Save current outputs first.
+
+The page shows the active saved voice and **Replace saved voice** / **Delete saved
+voice** controls. Replacement requires permission for the new recording; deletion
+means you must upload and authorize another voice before generating again.
+The prepared reference stays at
+`~/Library/Application Support/local-voice-narration/authorized-reference.wav`,
+outside this repository, until replaced or deleted. Use only on your trusted
+local account; deleting a file is not a guarantee of secure erasure or removal
+from backups. Generated outputs remain temporary and are not saved with the voice.
 
 Model files normally remain in `~/.cache/huggingface/hub` and are reused on
 later runs; environment settings can change this location. Initial dependency
@@ -92,7 +104,8 @@ is the default. No extra automatic speech-recognition model is required.
 
 Always listen to the whole result: generation can omit/mispronounce words or
 sound synthetic. Filtering is not proof of perceptual quality. Temporary UI
-outputs must be downloaded before stopping the server.
+outputs must be downloaded before stopping the server. The saved reference,
+unlike generated session audio, remains available for subsequent narration.
 
 ## License
 

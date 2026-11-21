@@ -18,6 +18,7 @@ import tempfile
 import threading
 
 import narrate
+from voice_store import VoiceStore
 
 MAX_BODY = 24 * 1024 * 1024
 MAX_AUDIO = 16 * 1024 * 1024
@@ -36,8 +37,9 @@ def prerequisites():
 
 
 class App:
-    def __init__(self, directory):
+    def __init__(self, directory, voice_directory=None):
         self.directory = Path(directory)
+        self.voices = VoiceStore(voice_directory)
         self.token = secrets.token_urlsafe(32)
         self.lock = threading.Lock()
         self.worker = None
@@ -51,27 +53,38 @@ class App:
             self.status["stage"] = stage
 
     def start(self, data):
-        if data.get("consent") is not True:
-            raise ValueError("Confirm voice ownership or explicit speaker permission")
         text = data.get("text")
         encoded = data.get("audio")
         if not isinstance(text, str) or len(text) > 20000:
             raise ValueError("Text must contain 1 to 20000 characters")
         narrate.chunks(text)
-        if not isinstance(encoded, str):
-            raise ValueError("Select an audio recording")
-        try:
-            audio = base64.b64decode(encoded, validate=True)
-        except (ValueError, binascii.Error) as error:
-            raise ValueError("Invalid audio upload encoding") from error
-        if not audio or len(audio) > MAX_AUDIO:
-            raise ValueError("Audio must be non-empty and at most 16 MiB")
+        audio = None
+        if encoded is not None:
+            if data.get("consent") is not True:
+                raise ValueError("Confirm speaker permission and local saving for the new voice")
+            if not isinstance(encoded, str):
+                raise ValueError("Invalid audio upload")
+            try:
+                audio = base64.b64decode(encoded, validate=True)
+            except (ValueError, binascii.Error) as error:
+                raise ValueError("Invalid audio upload encoding") from error
+            if not audio or len(audio) > MAX_AUDIO:
+                raise ValueError("Audio must be non-empty and at most 16 MiB")
         with self.lock:
             if self.stopping:
                 raise ValueError("Service is stopping")
             if self.status["busy"]:
                 raise ValueError("A narration job is already running")
-            self.status = {"stage": "Preparing your reference locally", "busy": True,
+            if audio is not None:
+                saved = self.voices.reference.exists() or self.voices.reference.is_symlink()
+            else:
+                saved = self.voices.active()
+            if audio is None and saved is None:
+                raise ValueError("No saved voice. Select an authorized recording first")
+            if audio is not None and saved and data.get("replace") is not True:
+                raise ValueError("Use Replace saved voice to change the active reference")
+            self.status = {"stage": "Saving your reference locally" if audio is not None else
+                           "Using your saved voice", "busy": True,
                            "files": [], "error": None}
             self.worker = threading.Thread(
                 target=self.run, args=(audio, text, data.get("download") is True,
@@ -79,8 +92,24 @@ class App:
             )
             self.worker.start()
 
+    def voice_status(self):
+        with self.lock:
+            try:
+                active = self.voices.active()
+                return {"saved": active is not None,
+                        "path": str(self.voices.reference), "error": None}
+            except (OSError, ValueError, EOFError) as error:
+                return {"saved": False, "path": str(self.voices.reference),
+                        "error": f"Saved voice needs replacement or deletion: {error}"}
+
+    def delete_voice(self):
+        with self.lock:
+            if self.status["busy"]:
+                raise ValueError("Wait for the current job before deleting the saved voice")
+            self.voices.delete()
+
     def synthesize(self, reference, text, destination, download):
-        script = reference.parent / "script.txt"
+        script = destination.parent / "script.txt"
         script.write_text(text, encoding="utf-8")
         arguments = [
             sys.executable, "-u", str(Path(narrate.__file__).resolve()), "generate",
@@ -131,10 +160,20 @@ class App:
     def run(self, audio, text, download, cleanup):
         try:
             folder = Path(tempfile.mkdtemp(prefix="take-", dir=self.directory))
-            reference = folder / "reference-upload"
-            reference.write_bytes(audio)
-            prepared = folder / "reference.wav"
-            narrate.transform(reference, prepared, "prepare")
+            if audio is not None:
+                reference = folder / "reference-upload"
+                reference.write_bytes(audio)
+                prepared = folder / "reference.wav"
+                narrate.transform(reference, prepared, "prepare")
+                with self.lock:
+                    prepared = self.voices.save(prepared)
+                reference.unlink()
+                (folder / "reference.wav").unlink()
+            else:
+                with self.lock:
+                    prepared = self.voices.active()
+                if prepared is None:
+                    raise ValueError("Saved voice is missing; upload an authorized recording")
             raw = folder / "raw.wav"
             self.synthesize(prepared, text, raw, download)
             files = [raw]
@@ -208,6 +247,7 @@ def handler_for(app):
                 with app.lock:
                     status = dict(app.status)
                 status["prerequisites"] = prerequisites()
+                status["voice"] = app.voice_status()
                 self.reply(200, json.dumps(status).encode())
             elif self.path.startswith(f"/media/{app.token}/"):
                 name = self.path[len(f"/media/{app.token}/"):]
@@ -223,7 +263,7 @@ def handler_for(app):
                 self.reply(404, b'{"error":"Not found"}')
 
         def do_POST(self):
-            if self.path != "/generate" or not self.authorized():
+            if self.path not in ("/generate", "/voice/delete") or not self.authorized():
                 self.reply(403, b'{"error":"Invalid local session"}')
                 return
             try:
@@ -235,9 +275,13 @@ def handler_for(app):
                 data = json.loads(self.rfile.read(length))
                 if not isinstance(data, dict):
                     raise ValueError("Expected an object")
-                app.start(data)
-                self.reply(202, b'{"accepted":true}')
-            except (ValueError, UnicodeError) as error:
+                if self.path == "/voice/delete":
+                    app.delete_voice()
+                    self.reply(200, b'{"deleted":true}')
+                else:
+                    app.start(data)
+                    self.reply(202, b'{"accepted":true}')
+            except (ValueError, OSError, EOFError) as error:
                 self.reply(400, json.dumps({"error": str(error)}).encode())
 
     return Handler
@@ -251,7 +295,8 @@ def main():
         app = App(directory)
         server = ThreadingHTTPServer(("127.0.0.1", args.port), handler_for(app))
         server.daemon_threads = True
-        print(f"Open http://127.0.0.1:{server.server_port} (Ctrl-C stops and removes session audio)",
+        print(f"Open http://127.0.0.1:{server.server_port} "
+              "(Ctrl-C removes generated session audio; saved voice remains)",
               flush=True)
         try:
             server.serve_forever()

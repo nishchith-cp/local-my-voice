@@ -36,7 +36,8 @@ Direct dependencies are pinned; this is not a full transitive lock.
 1. Read the process/privacy explanation in the page.
 2. Select a clear, short, single-speaker recording (up to 16 MiB). ffmpeg
    decodes the first audio stream to mono 24 kHz PCM WAV. Avoid music and
-   overlapping voices. Confirm it is your voice or explicitly authorized.
+   overlapping voices. Confirm it is your voice or explicitly authorized and
+   approve saving it locally. Only the prepared reference is retained.
 3. Try the editable generic sample text. Tick the model-download permission
    only if you authorize fetching missing files. Otherwise cached-only mode
    fails explicitly when the model is unavailable.
@@ -47,12 +48,33 @@ Direct dependencies are pinned; this is not a full transitive lock.
 5. Listen through the full result, then download raw WAV, cleaned WAV if
    selected, and MP3. Check missing words, pronunciation and model artifacts.
 6. Paste your own narration transcript into the same text area and generate
-   another take. Save current outputs first.
+   another take. Save current outputs first. The saved voice is reused without
+   another upload or speaker-permission prompt, even after restarting the service.
+
+### Saved voice: upload once, reuse later
+
+The active saved voice and its location are shown in the page. The service keeps
+one prepared reference at
+`~/Library/Application Support/local-voice-narration/authorized-reference.wav`,
+outside the repository, with owner-only directory/file permissions (0700/0600).
+Saving the reference records your permission for its continued local reuse;
+it is not independent proof of speaker consent. Do not reuse it if that permission
+has been withdrawn.
+
+Use **Replace saved voice** to select and authorize a new recording. A failed
+conversion/save preserves the previous voice; a successfully saved replacement
+remains active even if subsequent model generation fails. Use **Delete saved voice**
+to remove it; the next narration then requires an authorized recording. These
+controls are blocked during generation. The saved reference is not exposed as a
+download. Deletion does not remove generated outputs, backups, or guarantee secure
+erasure. Do not share the local account or run multiple service instances against
+the same saved voice at once.
 
 The interface is single-user and accepts one job at a time. Each job uses new
 filenames. Audio lives in a private OS temporary session directory, not in this
 repository. **Download before stopping the server with Ctrl-C**: stopping removes
-the session directory. Abnormal process termination can leave temporary files;
+the generated session directory, not the saved reference. Abnormal process
+termination can leave temporary files;
 disk encryption and local machine access remain your responsibility. No claim
 of secure erasure is made. Do not use this service on an untrusted shared machine.
 
@@ -76,6 +98,7 @@ dependency requests. Cached-only mode sets `HF_HUB_OFFLINE=1`; use OS network
 controls for strict isolation. Speaker-embedding mode calls the model directly
 without a reference transcript, avoiding a separate automatic STT download.
 The narration transcript is what to read, not a transcript of the reference.
+The saved reference never enters the model cache or this repository.
 
 ## CLI
 
@@ -95,6 +118,18 @@ WORK="$HOME/Narration" # Select/create this private directory yourself.
 .venv/bin/python scripts/narrate.py export \
   --input "$WORK/clean.wav" --output "$WORK/narration.mp3"
 ```
+
+After authorizing and saving a reference in the UI, the CLI can reuse it without
+another recording or redundant consent flag:
+
+```sh
+.venv/bin/python scripts/narrate.py generate \
+  --saved-voice --script "$WORK/script.txt" --output "$WORK/later.wav"
+```
+
+`--saved-voice` and `--reference` are mutually exclusive. Explicit references
+still require `--consent` each time; the CLI does not save them automatically.
+Download permission remains separate and defaults to cached-only generation.
 
 Existing output paths are never replaced. Raw and cleaned audio remain separate.
 CLI outputs are owner-readable/writable on POSIX. English narration uses
