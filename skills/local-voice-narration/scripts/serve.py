@@ -88,7 +88,7 @@ class App:
                            "files": [], "error": None, "reference_source": None}
             self.worker = threading.Thread(
                 target=self.run, args=(audio, text, data.get("download") is True,
-                                      data.get("clean") is True),
+                                      data.get("clean", True) is True),
             )
             self.worker.start()
 
@@ -183,16 +183,16 @@ class App:
                 self.status["files"] = [str(raw.relative_to(self.directory))]
             chosen = raw
             if cleanup:
-                self.update("Applying gentle noise filtering; preserving raw audio")
+                self.update("Reducing hiss/background noise in generated narration; preserving raw audio")
                 chosen = folder / "clean.wav"
                 narrate.transform(raw, chosen, "clean")
                 files.append(chosen)
                 with self.lock:
                     self.status["files"] = [str(file.relative_to(self.directory)) for file in files]
             self.update("Encoding MP3 for playback and export")
-            mp3 = folder / "narration.mp3"
+            mp3 = folder / ("narration-clean.mp3" if cleanup else "narration.mp3")
             narrate.transform(chosen, mp3, "export")
-            files.append(mp3)
+            files = [mp3, chosen, raw] if cleanup else [mp3, raw]
             with self.lock:
                 self.status["files"] = [str(file.relative_to(self.directory)) for file in files]
                 source = self.status["reference_source"]

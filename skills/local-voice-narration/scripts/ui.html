@@ -54,8 +54,12 @@ and reuse it for later narration.</label>
 <label><input id="download" type="checkbox"> Allow missing model files to
 download from Hugging Face for this run. I understand this can be substantial
 and requires internet; it does not upload my recording.</label>
-<label><input id="clean" type="checkbox" checked> Also make a gently cleaned WAV
-(preserve the raw WAV).</label>
+<label><input id="clean" type="checkbox" checked> Reduce hiss/background noise in
+generated narration (recommended; preserve the raw WAV).</label>
+<small>Recommended and enabled by default. Cleaned audio is presented first for
+playback/export. This does not change your uploaded or saved voice sample.
+Some noise may remain; filtering cannot fix robotic pronunciation and may affect
+quiet detail. Uncheck to export unfiltered narration.</small>
 <button id="generate" type="button">Generate narration</button>
 <p id="stage" role="status" aria-live="polite">Ready</p>
 <p id="error" role="alert"></p>
@@ -125,7 +129,13 @@ async function poll() {
         audio.controls = true; audio.preload = "none"; audio.src = url;
         const link = document.createElement("a");
         link.href = url; link.download = name.split("/").pop();
-        link.textContent = "Download " + link.download;
+        const labels = {
+          "narration-clean.mp3": "Play/download cleaned narration (MP3)",
+          "clean.wav": "Download cleaned narration (WAV)",
+          "raw.wav": "Compare/download raw narration (unfiltered WAV)",
+          "narration.mp3": "Play/download unfiltered narration (MP3)"
+        };
+        link.textContent = labels[link.download] || "Download " + link.download;
         element("outputs").append(link, audio);
       }
     }

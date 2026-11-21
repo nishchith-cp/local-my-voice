@@ -42,11 +42,13 @@ Direct dependencies are pinned; this is not a full transitive lock.
    only if you authorize fetching missing files. Otherwise cached-only mode
    fails explicitly when the model is unavailable.
 4. Generate. Stages show reference preparation, model loading (and possible
-   download), chunk generation, optional filtering and MP3 encoding.
+   download), chunk generation, output noise reduction and MP3 encoding.
    Upstream download tools may show additional details in the terminal.
    No invented download percentage, total size or completion time is shown.
-5. Listen through the full result, then download raw WAV, cleaned WAV if
-   selected, and MP3. Check missing words, pronunciation and model artifacts.
+5. Noise reduction is on by default for generated narration. Listen to the
+   cleaned MP3 first, then download it, the cleaned WAV, and the raw WAV for
+   comparison. Uncheck the cleanup control to play/export unfiltered narration.
+   Check missing words, pronunciation and model artifacts.
 6. Paste your own narration transcript into the same text area and generate
    another take. Save current outputs first. The saved voice is reused without
    another upload or speaker-permission prompt, even after restarting the service.
@@ -143,9 +145,34 @@ paragraph/word chunks up to 500 characters, 350 ms pauses and at most 1,200
 generated tokens per chunk. Listen for truncation and shorten paragraphs if
 needed; automatic validation cannot prove every word was spoken.
 
-Cleanup is `highpass=f=70,afftdn=nr=8:nf=-45:tn=1:gs=8,alimiter=limit=0.95:level=false`
-to PCM 16-bit WAV. MP3 export uses `libmp3lame -q:a 2`. These filters can affect
-the voice and do not guarantee better perceived quality or fix model artifacts.
+### Generated narration noise reduction
+
+Cleanup applies only to generated output, not to the uploaded or saved voice
+reference. It uses a 70 Hz high-pass for low rumble, adaptive spectral denoising
+for steady hiss/noise, and a non-boosting peak limiter:
+
+```text
+highpass=f=70,afftdn=nr=12:nf=-40:tn=1:gs=8,alimiter=limit=0.95:level=false
+```
+
+This increases spectral noise reduction from the earlier 8 dB setting to 12 dB
+and adjusts the initial noise floor, while tracking noise over time. The filter
+setting is not a promise of 12 dB measured improvement. In a seeded synthetic
+voice-band signal with hum/hiss, measured pause noise dropped about 6.1 dB and
+the 180/720/2400 Hz signal components changed by less than 0.6 dB. This is a
+regression fixture, not proof of quality on every voice or a listening evaluation.
+Duration and raw data are preserved.
+
+The UI presents `narration-clean.mp3`, `clean.wav`, then `raw.wav`. Uncheck the
+output cleanup control to export `narration.mp3` from the raw WAV instead.
+The CLI `generate` still writes raw audio; use `clean` followed by `export`
+as above for the recommended processed result. No new model or dependency is
+needed, and an already saved reference is not filtered again on later runs.
+
+WAV cleanup writes PCM 16-bit; MP3 export uses `libmp3lame -q:a 2`. Some hiss,
+background noise or voice changes may remain. Quiet details can be affected;
+compare the raw output if processing sounds worse. Cleanup cannot repair robotic
+pronunciation, restore missing words, or guarantee complete silence.
 
 ## Troubleshooting
 

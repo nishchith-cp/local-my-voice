@@ -3,6 +3,7 @@ import http.client
 import io
 import json
 import math
+import random
 from pathlib import Path
 import shutil
 import struct
@@ -202,6 +203,61 @@ class PipelineTests(unittest.TestCase):
                     self.assertGreater(file.getnframes(), 0)
             self.assertGreater(mp3.stat().st_size, 0)
 
+    @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg not installed")
+    def test_generated_cleanup_reduces_hum_hiss_and_preserves_voice_band(self):
+        rate = 24000
+        rng = random.Random(714)
+        samples, voice = [], []
+        for index in range(rate * 5):
+            time = index / rate
+            envelope = .6 + .4 * math.sin(2 * math.pi * 3 * time) ** 2 if 1 <= time < 4 else 0
+            speech = envelope * sum(
+                amplitude * math.sin(2 * math.pi * frequency * time)
+                for frequency, amplitude in ((180, .12), (720, .06), (2400, .035))
+            )
+            voice.append(speech)
+            samples.append(speech + .007 * math.sin(2 * math.pi * 60 * time) +
+                           rng.gauss(0, .006))
+        with tempfile.TemporaryDirectory() as folder:
+            source, output = Path(folder) / "raw.wav", Path(folder) / "clean.wav"
+            with wave.open(str(source), "wb") as file:
+                file.setparams((1, 2, rate, 0, "NONE", "not compressed"))
+                file.writeframes(b"".join(struct.pack("<h", round(sample * 32767))
+                                          for sample in samples))
+            original_bytes = source.read_bytes()
+            narrate.transform(source, output, "clean")
+            with wave.open(str(output), "rb") as file:
+                self.assertEqual((file.getnchannels(), file.getframerate(),
+                                  file.getsampwidth(), file.getnframes()),
+                                 (1, rate, 2, len(samples)))
+                frames = file.readframes(file.getnframes())
+            clean = [sample[0] / 32768 for sample in struct.iter_unpack("<h", frames)]
+            self.assertTrue(all(math.isfinite(value) for value in clean))
+            self.assertGreater(max(map(abs, clean)), .01)
+            self.assertLessEqual(max(map(abs, clean)), 1)
+            self.assertEqual(source.read_bytes(), original_bytes)
+
+            def rms(values):
+                return math.sqrt(sum(value * value for value in values) / len(values))
+
+            pause = slice(round(.35 * rate), round(.85 * rate))
+            reduction = 20 * math.log10(rms(samples[pause]) / rms(clean[pause]))
+            self.assertGreater(reduction, 5.8)
+            first, last = round(1.4 * rate), round(3.6 * rate)
+
+            def amplitude(values, frequency):
+                real = sum(values[index] * math.cos(2 * math.pi * frequency * index / rate)
+                           for index in range(first, last))
+                imaginary = sum(values[index] * math.sin(2 * math.pi * frequency * index / rate)
+                                for index in range(first, last))
+                return 2 * math.hypot(real, imaginary) / (last - first)
+
+            for frequency in (180, 720, 2400):
+                with self.subTest(frequency=frequency):
+                    ratio = amplitude(clean, frequency) / amplitude(voice, frequency)
+                    self.assertGreater(ratio, .90)
+                    self.assertLess(ratio, 1.05)
+
 
 class InterfaceTests(unittest.TestCase):
     def setUp(self):
@@ -319,7 +375,7 @@ class InterfaceTests(unittest.TestCase):
             with patch.object(narrate, "transform") as transform:
                 transform.side_effect = lambda source, output, operation: Path(output).write_bytes(
                     b"synthetic MP3")
-                restarted.start({"text": "Later narration."})
+                restarted.start({"text": "Later narration.", "clean": False})
                 restarted.worker.join()
                 self.assertEqual(synthesis.call_args.args[0], restarted.voices.reference)
                 self.assertEqual(transform.call_args.args[2], "export")
@@ -370,6 +426,31 @@ class InterfaceTests(unittest.TestCase):
             self.app.delete_voice()
         with self.assertRaisesRegex(ValueError, "already running"):
             self.app.start({"text": "Generic text."})
+
+    def test_generated_cleanup_is_default_and_preserves_raw_and_saved_reference(self):
+        prepared = Path(self.temporary.name) / "prepared.wav"
+        prepared.write_bytes(reference_bytes())
+        self.app.voices.save(prepared)
+        original_reference = self.app.voices.reference.read_bytes()
+        operations = []
+
+        def transform(source, output, operation):
+            operations.append((Path(source).name, operation))
+            Path(output).write_bytes(b"synthetic clean" if operation == "clean" else b"synthetic MP3")
+
+        with patch.object(self.app, "synthesize") as synthesis:
+            synthesis.side_effect = lambda ref, text, output, download: Path(output).write_bytes(
+                b"synthetic raw")
+            with patch.object(narrate, "transform", side_effect=transform):
+                self.app.start({"text": "Generic narration."})
+                self.app.worker.join()
+        self.assertIsNone(self.app.status["error"])
+        self.assertEqual(operations, [("raw.wav", "clean"), ("clean.wav", "export")])
+        self.assertEqual([Path(name).name for name in self.app.status["files"]],
+                         ["narration-clean.mp3", "clean.wav", "raw.wav"])
+        raw = self.app.directory / self.app.status["files"][-1]
+        self.assertEqual(raw.read_bytes(), b"synthetic raw")
+        self.assertEqual(self.app.voices.reference.read_bytes(), original_reference)
 
     def test_saved_reference_is_not_downloadable(self):
         prepared = Path(self.temporary.name) / "prepared.wav"

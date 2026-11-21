@@ -15,7 +15,7 @@ import tempfile
 
 MODEL = "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit"
 RATE = 24000
-FILTER = "highpass=f=70,afftdn=nr=8:nf=-45:tn=1:gs=8,alimiter=limit=0.95:level=false"
+FILTER = "highpass=f=70,afftdn=nr=12:nf=-40:tn=1:gs=8,alimiter=limit=0.95:level=false"
 
 
 def source_file(value):

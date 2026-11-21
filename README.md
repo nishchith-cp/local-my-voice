@@ -6,7 +6,8 @@ own transcript**. Includes a loopback-only browser interface and a reusable CLI.
 
 Generation uses MLX Audio and Qwen3-TTS locally. Setup downloads dependencies;
 first use may download model files after confirmation. No cloud voice API is
-required. Optional gentle filtering preserves the raw audio.
+required. Generated-output hiss/noise reduction is on by default in the local
+interface, while preserving raw audio for comparison.
 
 ## Listen to the original narration takes
 
@@ -114,10 +115,11 @@ the interface directly.
    this downloads model files, not uploads of your voice. Without permission,
    generation stays cached-only and reports missing files explicitly.
 4. **Generate and listen.** The service prepares your reference, loads the model,
-   generates speech in chunks, optionally applies gentle filtering, and encodes
+   generates speech in chunks, reduces output hiss/noise by default, and encodes
    MP3. The page shows stages and errors; speed depends on your machine.
-5. **Download your audio.** Preview the result and save the raw WAV, optional
-   cleaned WAV, and MP3. Listen for missing words and pronunciation problems.
+5. **Download your audio.** Preview the cleaned MP3 first and save it, the
+   cleaned WAV, and raw WAV for comparison. Uncheck noise reduction if you prefer
+   unfiltered playback/export. Listen for missing words and pronunciation problems.
 6. **Use your own transcript.** Replace the sample text with what you want read
    aloud and generate another take. Your saved voice is reused automatically,
    including after browser/service restarts; no repeated upload or speaker
@@ -147,6 +149,13 @@ stored in a temporary session directory and removed on normal shutdown.
 To reopen the interface later, run `.venv/bin/python scripts/serve.py` from the
 same skill directory; you do not need to recreate the environment each time.
 The interface is single-user and loopback-only: do not expose or forward its port.
+
+Noise reduction affects **generated narration only**, not your uploaded/saved
+voice sample. It uses FFmpeg filtering without another model download. It can
+reduce steady hiss and rumble but may affect quiet detail; it cannot fix robotic
+pronunciation or guarantee removal of every background sound. Existing original
+demo takes above are retained unchanged. See the detailed guide for the filter
+and synthetic regression measurements.
 
 ## Install for GitHub Copilot
 

@@ -41,7 +41,10 @@ needed, and generating. Selecting audio transfers it to the local loopback
 service, not a cloud voice provider. The service shows factual stages and errors,
 not invented percentages or estimated times.
 
-Have the user listen and download raw WAV, optional cleaned WAV and MP3.
+Output noise reduction is enabled by default: have the user listen to the
+cleaned MP3 first and keep raw WAV for comparison. The cleanup checkbox opts out
+if filtering sounds worse. It only affects generated narration, never the
+uploaded/saved reference; do not add a new consent prompt or filter that reference.
 Then they can replace the sample with their own transcript and generate again.
 Download desired outputs before stopping the service; generated session files are
 temporary, but the saved voice survives restarts. The UI shows the active reference
@@ -57,7 +60,7 @@ Use the venv Python with `scripts/narrate.py`:
 
 1. `prepare --input <reference.m4a> --output <reference-24k.wav> --consent`
 2. `generate --reference <reference-24k.wav> --script <script.txt> --output <raw.wav> --consent`
-3. Optionally `clean --input <raw.wav> --output <clean.wav>`
+3. Recommended `clean --input <raw.wav> --output <clean.wav>` (skip only if requested)
 4. `export --input <chosen.wav> --output <narration.mp3>`
 
 Generation is cached-only by default. Add `--allow-download` only after
@@ -84,7 +87,10 @@ Even these chunks can truncate; listen against the complete script and shorten
 paragraphs when words are missing. Waveform checks reject empty, non-finite,
 near-silent or out-of-range results but do not prove completeness or quality.
 
-Cleanup uses conservative filtering, not source separation. It may change the
+Cleanup uses a 70 Hz high-pass, adaptive spectral denoising at `nr=12:nf=-40`
+with noise tracking, and a non-boosting limiter. It targets generated hiss/noise,
+not reference processing, and adds no model download. It is not source separation.
+It may change the
 voice, leave noise, or sound worse; compare raw and cleaned versions. It cannot
 reliably repair robotic cadence, pronunciation or similarity. Report actual
 failures and output paths, not success-shaped fallbacks.
