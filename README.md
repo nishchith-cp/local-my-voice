@@ -23,15 +23,45 @@ not an original speaker recording. All six read the same transcript:
 > sometimes, it means he’s the only one who sees clearly enough, and has his
 > priorities straight enough, to do what needs to be done.
 
-- [Conversational](samples/luffy-conversational.mp3)
-- [Reflective — more deliberate pauses](samples/luffy-reflective.mp3)
-- [Lively — brisker delivery](samples/luffy-lively.mp3)
-- [Unhurried](samples/luffy-unhurried.mp3)
-- [Flowing — shorter pauses](samples/luffy-flowing.mp3)
-- [Measured](samples/luffy-measured.mp3)
+### Conversational
 
-GitHub may show a download rather than an inline audio player. Open the file's
-raw/download link to play it in your browser or audio app.
+[Download MP3](samples/luffy-conversational.mp3)
+
+https://github.com/user-attachments/assets/cf367aca-2ca0-4825-890d-301a4c9bdc2f
+
+### Reflective — more deliberate pauses
+
+[Download MP3](samples/luffy-reflective.mp3)
+
+https://github.com/user-attachments/assets/3cc76b4b-7fd5-464b-a48a-e9d16b9f16f9
+
+### Lively — brisker delivery
+
+[Download MP3](samples/luffy-lively.mp3)
+
+https://github.com/user-attachments/assets/c57eab7c-c5be-43a8-bf5e-3de80e225910
+
+### Unhurried
+
+[Download MP3](samples/luffy-unhurried.mp3)
+
+https://github.com/user-attachments/assets/2ee7ca04-5871-4f52-adcb-7d3ae6f81307
+
+### Flowing — shorter pauses
+
+[Download MP3](samples/luffy-flowing.mp3)
+
+https://github.com/user-attachments/assets/3e70cc3b-5e61-4465-aec6-eb402843c472
+
+### Measured
+
+[Download MP3](samples/luffy-measured.mp3)
+
+https://github.com/user-attachments/assets/68882a34-3792-4d78-b3f1-f999f78f2e4b
+
+The video players wrap the full original MP3 audio in a static labeled cover
+(H.264/AAC) for GitHub playback. They introduce no new speech or voice reference.
+If your GitHub client does not render a player, use the MP3 download link.
 The [plain-text transcript](samples/luffy-transcript.txt) is available separately.
 
 **Provenance:** generated locally with
@@ -46,7 +76,7 @@ implemented in the skill UI**. The interface still starts with its generic
 editable sample text; paste this transcript if you want to narrate it yourself.
 Outputs will vary rather than reproduce these takes exactly.
 
-Only the six approved finished MP3s are public. The source recording, raw WAVs,
+Only the six approved finished takes and their playback wrappers are public. The source recording, raw WAVs,
 speaker representations, and saved private reference are not included. These
 original conversions replace the earlier generic eSpeak export demos.
 
