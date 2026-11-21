@@ -8,42 +8,47 @@ Generation uses MLX Audio and Qwen3-TTS locally. Setup downloads dependencies;
 first use may download model files after confirmation. No cloud voice API is
 required. Optional gentle filtering preserves the raw audio.
 
-## Listen to the sample text
+## Listen to the original narration takes
 
-> Welcome to a quiet morning. The sky is clear, and a gentle breeze moves through
-> the trees. Take a moment to pause, breathe, and enjoy the day ahead.
+These are the original finished conversions, published with the voice owner's
+approval. Each is **AI-generated narration using an authorized voice sample**,
+not an original speaker recording. All six read the same transcript:
 
-[Listen/download the raw demo (MP3)](samples/demo-raw.mp3) ·
-[Listen/download the gently filtered demo (MP3)](samples/demo-clean.mp3)
+> The thing about Luffy is that he lives so completely in the moment. Of all the
+> characters in any anime, he’s the one who isn’t tortured by his past. He has a
+> painful past, but he isn’t tormented by it. And he has a goal for the future,
+> but he isn’t so fixated on that goal that he loses sight of what’s right in
+> front of him. He’s always living fully in the moment. Sometimes, that makes
+> him hilarious, because he does exactly what he wants to do right then. And
+> sometimes, it means he’s the only one who sees clearly enough, and has his
+> priorities straight enough, to do what needs to be done.
+
+- [Conversational](samples/luffy-conversational.mp3)
+- [Reflective — more deliberate pauses](samples/luffy-reflective.mp3)
+- [Lively — brisker delivery](samples/luffy-lively.mp3)
+- [Unhurried](samples/luffy-unhurried.mp3)
+- [Flowing — shorter pauses](samples/luffy-flowing.mp3)
+- [Measured](samples/luffy-measured.mp3)
 
 GitHub may show a download rather than an inline audio player. Open the file's
 raw/download link to play it in your browser or audio app.
+The [plain-text transcript](samples/luffy-transcript.txt) is available separately.
 
-These public examples use **eSpeak NG's generic English synthetic voice**,
-not a person's recording, saved voice, or Qwen3-TTS output. They demonstrate
-the sample text and MP3/filtering exports, **not voice-cloning quality**.
-No private reference was used. The same text is prefilled in the local interface;
-your authorized voice sample is used only when you run narration locally.
+**Provenance:** generated locally with
+`mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit` via MLX Audio using an authorized
+voice reference. These are independently sampled takes with varied paragraph
+pauses and modest post-generation tempo adjustments, then gentle noise cleanup
+and MP3 export. They are not an exact transfer of someone else's expression or
+proof of speaker identity.
 
-To reproduce the demos with eSpeak NG and ffmpeg installed:
+The labels describe these existing exports, **not mode presets currently
+implemented in the skill UI**. The interface still starts with its generic
+editable sample text; paste this transcript if you want to narrate it yourself.
+Outputs will vary rather than reproduce these takes exactly.
 
-```sh
-DEMO_DIR="$(mktemp -d)"
-espeak-ng -v en-us -s 145 -f samples/demo-text.txt -w "$DEMO_DIR/demo.wav"
-ffmpeg -nostdin -n -i "$DEMO_DIR/demo.wav" \
-  -c:a libmp3lame -q:a 2 "$DEMO_DIR/demo-raw.mp3"
-ffmpeg -nostdin -n -i "$DEMO_DIR/demo.wav" \
-  -af 'highpass=f=70,afftdn=nr=8:nf=-45:tn=1:gs=8,alimiter=limit=0.95:level=false' \
-  -c:a libmp3lame -q:a 2 "$DEMO_DIR/demo-clean.mp3"
-printf 'Demo files: %s\n' "$DEMO_DIR"
-```
-
-The commands create a fresh temporary directory; remove it after saving the
-outputs you want. eSpeak NG is needed
-only to reproduce these generic demos, not to run the skill. The demo was
-generated with eSpeak NG 1.52.0; its software has
-[separate licensing](https://github.com/espeak-ng/espeak-ng/blob/master/COPYING).
-No eSpeak software or voice data is bundled here.
+Only the six approved finished MP3s are public. The source recording, raw WAVs,
+speaker representations, and saved private reference are not included. These
+original conversions replace the earlier generic eSpeak export demos.
 
 ## Quick start: try it in your browser
 
@@ -137,7 +142,7 @@ share the same pipeline.
 Use only your own voice or get the speaker's explicit permission. Do not
 impersonate people deceptively; disclose synthetic narration when sharing.
 Keep recordings, private scripts, embeddings, generated media and model caches
-outside version control. Only the explicitly reviewed generic synthetic demos
+outside version control. Only the explicitly approved finished narration demos
 above are included alongside the tooling and tests; personal references remain
 excluded from version control.
 

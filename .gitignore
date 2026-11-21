@@ -25,6 +25,10 @@ models/
 *.pt
 *.pth
 
-# Only reviewed, generic public demos may be committed; never personal references.
-!samples/demo-raw.mp3
-!samples/demo-clean.mp3
+# Only these approved finished public demos may be committed; never voice references.
+!samples/luffy-conversational.mp3
+!samples/luffy-reflective.mp3
+!samples/luffy-lively.mp3
+!samples/luffy-unhurried.mp3
+!samples/luffy-flowing.mp3
+!samples/luffy-measured.mp3
